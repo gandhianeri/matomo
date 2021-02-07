@@ -167,7 +167,10 @@ abstract class Factory
             $oPeriod = new Range('range', $date, $timezone, Date::factory('today', $timezone));
         } else {
             if (!($date instanceof Date)) {
-                $date = Date::factory($date, $timezone);
+                if (preg_match('/^(now|today|yesterday|yesterdaySameTime|last[ -]?(?:week|month|year))$/i', $date)) {
+                    $date = Date::factoryInTimezone($date, $timezone);
+                }
+                $date = Date::factory($date);
             }
             $oPeriod = Factory::build($period, $date);
         }

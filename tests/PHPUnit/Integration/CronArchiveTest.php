@@ -21,6 +21,7 @@ use Piwik\Period\Factory;
 use Piwik\Plugins\CoreAdminHome\tests\Framework\Mock\API;
 use Piwik\Plugins\SegmentEditor\Model;
 use Piwik\Segment;
+use Piwik\Sequence;
 use Piwik\Site;
 use Piwik\Tests\Framework\Fixture;
 use Piwik\Tests\Framework\Mock\FakeLogger;
@@ -361,7 +362,7 @@ class CronArchiveTest extends IntegrationTestCase
                         1,
                         '2020-02-03',
                         'day',
-                        'browserCode==IE',
+                        'visitCount>5',
                         false,
                         false,
                     ),
@@ -369,7 +370,7 @@ class CronArchiveTest extends IntegrationTestCase
                         1,
                         '2020-02-03',
                         'day',
-                        'visitCount>5',
+                        'browserCode==IE',
                         false,
                         false,
                     ),
@@ -391,7 +392,7 @@ class CronArchiveTest extends IntegrationTestCase
                         1,
                         '2020-02-02',
                         'day',
-                        'browserCode==IE',
+                        'visitCount>5',
                         false,
                         false,
                     ),
@@ -399,7 +400,7 @@ class CronArchiveTest extends IntegrationTestCase
                         1,
                         '2020-02-02',
                         'day',
-                        'visitCount>5',
+                        'browserCode==IE',
                         false,
                         false,
                     ),
@@ -543,7 +544,7 @@ class CronArchiveTest extends IntegrationTestCase
 
         $api = API::getInstance();
 
-        $cronarchive = new TestCronArchive(Fixture::getRootUrl() . 'tests/PHPUnit/proxy/index.php');
+        $cronarchive = new TestCronArchive();
         $cronarchive->init();
         $cronarchive->setApiToInvalidateArchivedReport($api);
         $cronarchive->invalidateArchivedReportsForSitesThatNeedToBeArchivedAgain(1);
@@ -587,7 +588,7 @@ class CronArchiveTest extends IntegrationTestCase
 
         $allSegments = $segments->getSegmentsToAutoArchive(1);
 
-        $cronarchive = new TestCronArchive(Fixture::getRootUrl() . 'tests/PHPUnit/proxy/index.php');
+        $cronarchive = new TestCronArchive();
         $this->assertTrue($cronarchive->wasSegmentChangedRecently('actions>=1', $allSegments));
 
         // created 30 hours ago...
@@ -614,7 +615,7 @@ class CronArchiveTest extends IntegrationTestCase
 
         $logger = new FakeLogger();
 
-        $archiver = new CronArchive(null, $logger);
+        $archiver = new CronArchive($logger);
         $archiver->init();
         $archiveFilter = new CronArchive\ArchiveFilter();
         $archiveFilter->setSkipSegmentsForToday(true);
@@ -625,7 +626,6 @@ class CronArchiveTest extends IntegrationTestCase
         $archiver->run();
 
         self::assertStringContainsString('Will skip segments archiving for today unless they were created recently', $logger->output);
-        self::assertStringContainsString('Segment "actions>=1" was created or changed recently and will therefore archive today', $logger->output);
         self::assertStringNotContainsString('Segment "actions>=2" was created recently', $logger->output);
     }
 
@@ -659,7 +659,7 @@ class CronArchiveTest extends IntegrationTestCase
 
         $logger = new FakeLogger();
 
-        $archiver = new CronArchive(null, $logger);
+        $archiver = new CronArchive($logger);
 
         $archiveFilter = new CronArchive\ArchiveFilter();
         $archiveFilter->setSegmentsToForce(['actions>=2;browserCode=FF', 'actions>=2']);
@@ -694,37 +694,35 @@ Checking for queued invalidations...
   Will invalidate archived reports for 2019-12-02 for following websites ids: 1
   Today archive can be skipped due to no visits for idSite = 1, skipping invalidation...
   Yesterday archive can be skipped due to no visits for idSite = 1, skipping invalidation...
-  Segment "actions>=2" was created or changed recently and will therefore archive today (for site ID = 1)
-  Segment "actions>=4" was created or changed recently and will therefore archive today (for site ID = 1)
 Done invalidating
-Processing invalidation: [idinvalidation = 5, idsite = 1, period = day(2019-12-12 - 2019-12-12), name = donee0512c03f7c20af6ef96a8d792c6bb9f, segment = actions>=2].
-Processing invalidation: [idinvalidation = 14, idsite = 1, period = day(2019-12-11 - 2019-12-11), name = donee0512c03f7c20af6ef96a8d792c6bb9f, segment = actions>=2].
-Processing invalidation: [idinvalidation = 17, idsite = 1, period = day(2019-12-10 - 2019-12-10), name = donee0512c03f7c20af6ef96a8d792c6bb9f, segment = actions>=2].
-Starting archiving for ?module=API&method=CoreAdminHome.archiveReports&idSite=1&period=day&date=2019-12-12&format=json&segment=actions%253E%253D2&trigger=archivephp
-Starting archiving for ?module=API&method=CoreAdminHome.archiveReports&idSite=1&period=day&date=2019-12-11&format=json&segment=actions%253E%253D2&trigger=archivephp
-Starting archiving for ?module=API&method=CoreAdminHome.archiveReports&idSite=1&period=day&date=2019-12-10&format=json&segment=actions%253E%253D2&trigger=archivephp
-Archived website id 1, period = day, date = 2019-12-12, segment = 'actions%3E%3D2', 0 visits found. Time elapsed: %fs
-Archived website id 1, period = day, date = 2019-12-11, segment = 'actions%3E%3D2', 0 visits found. Time elapsed: %fs
-Archived website id 1, period = day, date = 2019-12-10, segment = 'actions%3E%3D2', 0 visits found. Time elapsed: %fs
-Processing invalidation: [idinvalidation = 6, idsite = 1, period = week(2019-12-09 - 2019-12-15), name = donee0512c03f7c20af6ef96a8d792c6bb9f, segment = actions>=2].
-Processing invalidation: [idinvalidation = 22, idsite = 1, period = day(2019-12-02 - 2019-12-02), name = donee0512c03f7c20af6ef96a8d792c6bb9f, segment = actions>=2].
+Processing invalidation: [idinvalidation = 269, idsite = 1, period = day(2019-12-12 - 2019-12-12), name = donee0512c03f7c20af6ef96a8d792c6bb9f, segment = actions>=2].
+Processing invalidation: [idinvalidation = 268, idsite = 1, period = day(2019-12-11 - 2019-12-11), name = donee0512c03f7c20af6ef96a8d792c6bb9f, segment = actions>=2].
+Processing invalidation: [idinvalidation = 267, idsite = 1, period = day(2019-12-10 - 2019-12-10), name = donee0512c03f7c20af6ef96a8d792c6bb9f, segment = actions>=2].
+Starting archiving for ?module=API&method=CoreAdminHome.archiveReports&idSite=1&period=day&date=2019-12-12&format=json&segment=actions%3E%3D2&trigger=archivephp
+Starting archiving for ?module=API&method=CoreAdminHome.archiveReports&idSite=1&period=day&date=2019-12-11&format=json&segment=actions%3E%3D2&trigger=archivephp
+Starting archiving for ?module=API&method=CoreAdminHome.archiveReports&idSite=1&period=day&date=2019-12-10&format=json&segment=actions%3E%3D2&trigger=archivephp
+Archived website id 1, period = day, date = 2019-12-12, segment = 'actions>=2', 0 visits found. Time elapsed: %fs
+Archived website id 1, period = day, date = 2019-12-11, segment = 'actions>=2', 0 visits found. Time elapsed: %fs
+Archived website id 1, period = day, date = 2019-12-10, segment = 'actions>=2', 0 visits found. Time elapsed: %fs
+Processing invalidation: [idinvalidation = 266, idsite = 1, period = week(2019-12-09 - 2019-12-15), name = donee0512c03f7c20af6ef96a8d792c6bb9f, segment = actions>=2].
+Processing invalidation: [idinvalidation = 257, idsite = 1, period = day(2019-12-02 - 2019-12-02), name = donee0512c03f7c20af6ef96a8d792c6bb9f, segment = actions>=2].
 No next invalidated archive.
-Starting archiving for ?module=API&method=CoreAdminHome.archiveReports&idSite=1&period=week&date=2019-12-09&format=json&segment=actions%253E%253D2&trigger=archivephp
-Starting archiving for ?module=API&method=CoreAdminHome.archiveReports&idSite=1&period=day&date=2019-12-02&format=json&segment=actions%253E%253D2&trigger=archivephp
-Archived website id 1, period = week, date = 2019-12-09, segment = 'actions%3E%3D2', 0 visits found. Time elapsed: %fs
-Archived website id 1, period = day, date = 2019-12-02, segment = 'actions%3E%3D2', 0 visits found. Time elapsed: %fs
-Processing invalidation: [idinvalidation = 23, idsite = 1, period = week(2019-12-02 - 2019-12-08), name = donee0512c03f7c20af6ef96a8d792c6bb9f, segment = actions>=2].
+Starting archiving for ?module=API&method=CoreAdminHome.archiveReports&idSite=1&period=week&date=2019-12-09&format=json&segment=actions%3E%3D2&trigger=archivephp
+Starting archiving for ?module=API&method=CoreAdminHome.archiveReports&idSite=1&period=day&date=2019-12-02&format=json&segment=actions%3E%3D2&trigger=archivephp
+Archived website id 1, period = week, date = 2019-12-09, segment = 'actions>=2', 0 visits found. Time elapsed: %fs
+Archived website id 1, period = day, date = 2019-12-02, segment = 'actions>=2', 0 visits found. Time elapsed: %fs
+Processing invalidation: [idinvalidation = 258, idsite = 1, period = week(2019-12-02 - 2019-12-08), name = donee0512c03f7c20af6ef96a8d792c6bb9f, segment = actions>=2].
 No next invalidated archive.
-Starting archiving for ?module=API&method=CoreAdminHome.archiveReports&idSite=1&period=week&date=2019-12-02&format=json&segment=actions%253E%253D2&trigger=archivephp
-Archived website id 1, period = week, date = 2019-12-02, segment = 'actions%3E%3D2', 0 visits found. Time elapsed: %fs
-Processing invalidation: [idinvalidation = 7, idsite = 1, period = month(2019-12-01 - 2019-12-31), name = donee0512c03f7c20af6ef96a8d792c6bb9f, segment = actions>=2].
+Starting archiving for ?module=API&method=CoreAdminHome.archiveReports&idSite=1&period=week&date=2019-12-02&format=json&segment=actions%3E%3D2&trigger=archivephp
+Archived website id 1, period = week, date = 2019-12-02, segment = 'actions>=2', 0 visits found. Time elapsed: %fs
+Processing invalidation: [idinvalidation = 256, idsite = 1, period = month(2019-12-01 - 2019-12-31), name = donee0512c03f7c20af6ef96a8d792c6bb9f, segment = actions>=2].
 No next invalidated archive.
-Starting archiving for ?module=API&method=CoreAdminHome.archiveReports&idSite=1&period=month&date=2019-12-01&format=json&segment=actions%253E%253D2&trigger=archivephp
-Archived website id 1, period = month, date = 2019-12-01, segment = 'actions%3E%3D2', 0 visits found. Time elapsed: %fs
-Processing invalidation: [idinvalidation = 8, idsite = 1, period = year(2019-01-01 - 2019-12-31), name = donee0512c03f7c20af6ef96a8d792c6bb9f, segment = actions>=2].
+Starting archiving for ?module=API&method=CoreAdminHome.archiveReports&idSite=1&period=month&date=2019-12-01&format=json&segment=actions%3E%3D2&trigger=archivephp
+Archived website id 1, period = month, date = 2019-12-01, segment = 'actions>=2', 0 visits found. Time elapsed: %fs
+Processing invalidation: [idinvalidation = 65, idsite = 1, period = year(2019-01-01 - 2019-12-31), name = donee0512c03f7c20af6ef96a8d792c6bb9f, segment = actions>=2].
 No next invalidated archive.
-Starting archiving for ?module=API&method=CoreAdminHome.archiveReports&idSite=1&period=year&date=2019-01-01&format=json&segment=actions%253E%253D2&trigger=archivephp
-Archived website id 1, period = year, date = 2019-01-01, segment = 'actions%3E%3D2', 0 visits found. Time elapsed: %fs
+Starting archiving for ?module=API&method=CoreAdminHome.archiveReports&idSite=1&period=year&date=2019-01-01&format=json&segment=actions%3E%3D2&trigger=archivephp
+Archived website id 1, period = year, date = 2019-01-01, segment = 'actions>=2', 0 visits found. Time elapsed: %fs
 No next invalidated archive.
 Finished archiving for site 1, 8 API requests, Time elapsed: %fs [1 / 1 done]
 No more sites left to archive, stopping.
@@ -734,6 +732,107 @@ SUMMARY
 Processed 8 archives.
 Total API requests: 8
 done: 8 req, %d ms, no error
+Time elapsed: %fs
+LOG;
+
+        // remove a bunch of debug lines since we can't have a sprintf format that long
+        $output = $this->cleanOutput($logger->output);
+
+        $this->assertStringMatchesFormat($expected, $output);
+    }
+
+    public function test_output_withSkipIdSites()
+    {
+        \Piwik\Tests\Framework\Mock\FakeCliMulti::$specifiedResults = array(
+            '/method=API.get/' => json_encode(array(array('nb_visits' => 1)))
+        );
+
+        Fixture::createWebsite('2014-12-12 00:01:02');
+        Fixture::createWebsite('2014-12-12 00:01:02');
+        Fixture::createWebsite('2014-12-12 00:01:02');
+
+        $tracker = Fixture::getTracker(1, '2019-12-12 02:03:00');
+        $tracker->enableBulkTracking();
+        foreach ([1,2,3] as $idSite) {
+            $tracker->setIdSite($idSite);
+            $tracker->setUrl('http://someurl.com');
+            Fixture::assertTrue($tracker->doTrackPageView('abcdefg'));
+
+            $tracker->setForceVisitDateTime('2019-12-11 03:04:05');
+            $tracker->setUrl('http://someurl.com/2');
+            Fixture::assertTrue($tracker->doTrackPageView('abcdefg2'));
+
+            $tracker->setForceVisitDateTime('2019-12-10 03:04:05');
+            $tracker->setUrl('http://someurl.com/3');
+            Fixture::assertTrue($tracker->doTrackPageView('abcdefg3'));
+        }
+        $tracker->doBulkTrack();
+
+        $logger = new FakeLogger();
+
+        // prevent race condition in sequence creation during test
+        $sequence = new Sequence(ArchiveTableCreator::getNumericTable(Date::factory('2019-12-10')));
+        $sequence->create();
+
+        $archiver = new CronArchive($logger);
+
+        $archiveFilter = new CronArchive\ArchiveFilter();
+        $archiver->setArchiveFilter($archiveFilter);
+        $archiver->shouldSkipSpecifiedSites = [1,3];
+
+        $archiver->init();
+        $archiver->run();
+
+        $version = Version::VERSION;
+        $expected = <<<LOG
+---------------------------
+INIT
+Running Matomo $version as Super User
+---------------------------
+NOTES
+- If you execute this script at least once per hour (or more often) in a crontab, you may disable 'Browser trigger archiving' in Matomo UI > Settings > General Settings.
+  See the doc at: https://matomo.org/docs/setup-auto-archiving/
+- Async process archiving supported, using CliMulti.
+- Reports for today will be processed at most every 900 seconds. You can change this value in Matomo UI > Settings > General Settings.
+---------------------------
+START
+Starting Matomo reports archiving...
+Applying queued rearchiving...
+Start processing archives for site 2.
+Checking for queued invalidations...
+  Will invalidate archived reports for 2019-12-11 for following websites ids: 2
+  Will invalidate archived reports for 2019-12-10 for following websites ids: 2
+  Today archive can be skipped due to no visits for idSite = 2, skipping invalidation...
+  Yesterday archive can be skipped due to no visits for idSite = 2, skipping invalidation...
+Done invalidating
+Processing invalidation: [idinvalidation = 1, idsite = 2, period = day(2019-12-11 - 2019-12-11), name = done, segment = ].
+Processing invalidation: [idinvalidation = 5, idsite = 2, period = day(2019-12-10 - 2019-12-10), name = done, segment = ].
+No next invalidated archive.
+Starting archiving for ?module=API&method=CoreAdminHome.archiveReports&idSite=2&period=day&date=2019-12-11&format=json&trigger=archivephp
+Starting archiving for ?module=API&method=CoreAdminHome.archiveReports&idSite=2&period=day&date=2019-12-10&format=json&trigger=archivephp
+Archived website id 2, period = day, date = 2019-12-11, segment = '', 1 visits found. Time elapsed: %fs
+Archived website id 2, period = day, date = 2019-12-10, segment = '', 1 visits found. Time elapsed: %fs
+Processing invalidation: [idinvalidation = 2, idsite = 2, period = week(2019-12-09 - 2019-12-15), name = done, segment = ].
+No next invalidated archive.
+Starting archiving for ?module=API&method=CoreAdminHome.archiveReports&idSite=2&period=week&date=2019-12-09&format=json&trigger=archivephp
+Archived website id 2, period = week, date = 2019-12-09, segment = '', 2 visits found. Time elapsed: %fs
+Processing invalidation: [idinvalidation = 3, idsite = 2, period = month(2019-12-01 - 2019-12-31), name = done, segment = ].
+No next invalidated archive.
+Starting archiving for ?module=API&method=CoreAdminHome.archiveReports&idSite=2&period=month&date=2019-12-01&format=json&trigger=archivephp
+Archived website id 2, period = month, date = 2019-12-01, segment = '', 2 visits found. Time elapsed: %fs
+Processing invalidation: [idinvalidation = 4, idsite = 2, period = year(2019-01-01 - 2019-12-31), name = done, segment = ].
+No next invalidated archive.
+Starting archiving for ?module=API&method=CoreAdminHome.archiveReports&idSite=2&period=year&date=2019-01-01&format=json&trigger=archivephp
+Archived website id 2, period = year, date = 2019-01-01, segment = '', 2 visits found. Time elapsed: %fs
+No next invalidated archive.
+Finished archiving for site 2, 5 API requests, Time elapsed: %fs [1 / 1 done]
+No more sites left to archive, stopping.
+Done archiving!
+---------------------------
+SUMMARY
+Processed 5 archives.
+Total API requests: 5
+done: 5 req, %d ms, no error
 Time elapsed: %fs
 LOG;
 
@@ -765,7 +864,7 @@ LOG;
 
         $logger = new FakeLogger();
 
-        $archiver = new CronArchive(null, $logger);
+        $archiver = new CronArchive($logger);
         $archiver->shouldArchiveSpecifiedSites = array(99999, 1);
         $archiver->init();
         $archiver->run();

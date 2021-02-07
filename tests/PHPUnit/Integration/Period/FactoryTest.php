@@ -9,13 +9,14 @@
 namespace Piwik\Tests\Integration\Period;
 
 use Piwik\Config;
+use Piwik\Date;
 use Piwik\Period;
 use Piwik\Period\Day;
 use Piwik\Period\Month;
 use Piwik\Period\Range;
 use Piwik\Period\Week;
 use Piwik\Period\Year;
-use Piwik\Tests\Framework\TestCase\IntegrationTestCase;
+use Piwik\Tests\Framework\TestCase\UnitTestCase;
 
 class TestPeriod
 {
@@ -60,13 +61,48 @@ class MockPluginManager extends \Piwik\Plugin\Manager
     }
 }
 
-class FactoryTest extends IntegrationTestCase
+/**
+ * @group PeriodFactoryTest
+ */
+class FactoryTest extends UnitTestCase
 {
+    /**
+     * @dataProvider getTestDataForMakePeriodFromQueryParams
+     */
+    public function test_makePeriodFromQueryParams_appliesTimezoneProperly($now, $timezone, $period, $date, $expectedLabel, $expectedRange)
+    {
+        Date::$now = strtotime($now);
+
+        $factory = Period\Factory::makePeriodFromQueryParams($timezone, $period, $date);
+        $this->assertEquals($expectedLabel, $factory->getLabel());
+        $this->assertEquals($expectedRange, $factory->getRangeString());
+    }
+
+    public function getTestDataForMakePeriodFromQueryParams()
+    {
+        return [
+            ['2020-12-24 03:37:00', 'America/Chicago', 'day', 'now', 'day', '2020-12-23,2020-12-23'],
+            ['2020-12-24 03:37:00', 'America/Chicago', 'day', 'today', 'day', '2020-12-23,2020-12-23'],
+            ['2020-12-24 16:37:00', 'America/Chicago', 'day', 'today', 'day', '2020-12-24,2020-12-24'],
+            ['2020-12-24 22:37:00', 'UTC+5', 'day', 'today', 'day', '2020-12-25,2020-12-25'],
+            ['2020-12-24 03:37:00', 'America/Chicago', 'day', 'yesterday', 'day', '2020-12-22,2020-12-22'],
+            ['2020-12-24 03:37:00', 'UTC+5', 'day', 'yesterday', 'day', '2020-12-23,2020-12-23'],
+            ['2020-12-24 16:37:00', 'UTC+12', 'day', 'yesterday', 'day', '2020-12-24,2020-12-24'],
+            ['2020-12-24 03:37:00', 'America/Chicago', 'day', 'yesterdaySameTime', 'day', '2020-12-22,2020-12-22'],
+            ['2020-12-24 03:37:00', 'America/Chicago', 'day', 'last-week', 'day', '2020-12-16,2020-12-16'],
+            ['2020-12-24 03:37:00', 'America/Chicago', 'day', 'last-month', 'day', '2020-11-23,2020-11-23'],
+            ['2020-12-24 03:37:00', 'UTC', 'week', 'last-month', 'week', '2020-11-23,2020-11-29'],
+            ['2020-12-23 03:37:00', 'America/Chicago', 'week', 'last-month', 'week', '2020-11-16,2020-11-22'],
+            ['2020-12-24 03:37:00', 'America/Chicago', 'day', 'last-year', 'day', '2019-12-23,2019-12-23'],
+            ['2020-12-24 03:37:00', 'America/Chicago', 'day', '2020-12-23', 'day', '2020-12-23,2020-12-23'],
+        ];
+    }
+
     /**
      * @dataProvider getBuildTestData
      */
     public function test_build_CreatesCorrectPeriodInstances($strPeriod, $date, $timezone, $expectedPeriodClass,
-                                                            $expectedRangeString)
+                                                             $expectedRangeString)
     {
         $period = Period\Factory::build($strPeriod, $date, $timezone);
         $this->assertInstanceOf($expectedPeriodClass, $period);

@@ -199,8 +199,6 @@ class CronArchive
      */
     private $periodIdsToLabels;
 
-    private $processNewSegmentsFrom;
-
     /**
      * @var ArchiveFilter
      */
@@ -212,18 +210,19 @@ class CronArchive
     private $cliMultiRequestParser;
 
     /**
+     * @var bool|mixed
+     */
+    private $supportsAsync;
+
+    /**
      * Constructor.
      *
-     * @param string|null $processNewSegmentsFrom When to archive new segments from. See [General] process_new_segments_from
-     *                                            for possible values.
      * @param LoggerInterface|null $logger
      */
-    public function __construct($processNewSegmentsFrom = null, LoggerInterface $logger = null)
+    public function __construct(LoggerInterface $logger = null)
     {
         $this->logger = $logger ?: StaticContainer::get('Psr\Log\LoggerInterface');
         $this->formatter = new Formatter();
-
-        $this->processNewSegmentsFrom = $processNewSegmentsFrom ?: StaticContainer::get('ini.General.process_new_segments_from');
 
         $this->invalidator = StaticContainer::get('Piwik\Archive\ArchiveInvalidator');
 
@@ -235,7 +234,8 @@ class CronArchive
 
         $this->rawLogDao = new RawLogDao();
 
-        $this->cliMultiRequestParser = new RequestParser($this->makeCliMulti()->supportsAsync());
+        $this->supportsAsync = $this->makeCliMulti()->supportsAsync();
+        $this->cliMultiRequestParser = new RequestParser($this->supportsAsync);
 
         $this->archiveFilter = new ArchiveFilter();
     }
@@ -270,7 +270,7 @@ class CronArchive
 
     public function init()
     {
-        $this->segmentArchiving = new SegmentArchiving($this->processNewSegmentsFrom, $this->dateLastForced);
+        $this->segmentArchiving = StaticContainer::get(SegmentArchiving::class);
 
         /**
          * This event is triggered during initializing archiving.
@@ -561,7 +561,7 @@ class CronArchive
         $visits = (int) $visits;
 
         $this->logger->info("Archived website id {$params['idSite']}, period = {$params['period']}, date = "
-            . "{$params['date']}, segment = '" . (isset($params['segment']) ? urldecode($params['segment']) : '') . "', "
+            . "{$params['date']}, segment = '" . (isset($params['segment']) ? urldecode(urldecode($params['segment'])) : '') . "', "
             . ($plugin ? "plugin = $plugin, " : "") . ($report ? "report = $report, " : "") . "$visits visits found. $timer");
     }
 
@@ -654,7 +654,7 @@ class CronArchive
     {
         $request = "?module=API&method=CoreAdminHome.archiveReports&idSite=$idSite&period=$period&date=" . $date . "&format=json";
         if ($segment) {
-            $request .= '&segment=' . urlencode(urlencode($segment));
+            $request .= '&segment=' . urlencode($segment);
         }
         if (!empty($plugin)) {
             $request .= "&plugin=" . $plugin;
@@ -696,7 +696,7 @@ class CronArchive
         if (empty($response)) {
             $message .= "The response was empty. This usually means a server error. A solution to this error is generally to increase the value of 'memory_limit' in your php.ini file. ";
 
-            if($this->makeCliMulti()->supportsAsync()) {
+            if($this->supportsAsync) {
                 $message .= " For more information and the error message please check in your PHP CLI error log file. As this core:archive command triggers PHP processes over the CLI, you can find where PHP CLI logs are stored by running this command: php -i | grep error_log";
             } else {
                 $message .= " For more information and the error message please check your web server's error Log file. As this core:archive command triggers PHP processes over HTTP, you can find the error message in your Matomo's web server error logs. ";
@@ -735,7 +735,7 @@ class CronArchive
         $websiteIds = array_intersect($websiteIds, $allWebsites);
 
         if (!empty($this->shouldSkipSpecifiedSites)) {
-            $websiteIds = array_intersect($websiteIds, $this->shouldSkipSpecifiedSites);
+            $websiteIds = array_diff($websiteIds, $this->shouldSkipSpecifiedSites);
         }
 
         /**
@@ -772,7 +772,7 @@ class CronArchive
     {
         if (empty($this->segmentArchiving)) {
             // might not be initialised if init is not called
-            $this->segmentArchiving = new SegmentArchiving($this->processNewSegmentsFrom, $this->dateLastForced);
+            $this->segmentArchiving = StaticContainer::get(SegmentArchiving::class);
         }
 
         $this->logger->debug("Checking for queued invalidations...");
@@ -832,26 +832,6 @@ class CronArchive
             $this->invalidateWithSegments($idSiteToInvalidate, $date, 'range', $_forceInvalidateNonexistant = true);
         }
 
-        // for new segments, invalidate past dates
-        $segmentDatesToInvalidate = $this->segmentArchiving->getSegmentArchivesToInvalidateForNewSegments($idSiteToInvalidate);
-
-        foreach ($segmentDatesToInvalidate as $info) {
-            $this->logger->info('  Segment "{segment}" was created or changed recently and will therefore archive today (for site ID = {idSite})', [
-                'segment' => $info['segment'],
-                'idSite' => $idSiteToInvalidate,
-            ]);
-
-            $earliestDate = $info['date'];
-
-            $allDates = PeriodFactory::build('range', $earliestDate . ',today')->getSubperiods();
-            $allDates = array_map(function (Period $p) {
-                return $p->getDateStart()->toString();
-            }, $allDates);
-            $allDates = implode(',', $allDates);
-
-            $this->getApiToInvalidateArchivedReport()->invalidateArchivedReports($idSiteToInvalidate, $allDates, $period = false, $info['segment']);
-        }
-
         $this->setInvalidationTime();
 
         $this->logger->debug("Done invalidating");
@@ -904,12 +884,12 @@ class CronArchive
                     $_forceInvalidateNonexistant);
             }
 
-            foreach ($this->segmentArchiving->getAllSegmentsToArchive($idSite) as $segment) {
-                $params = new Parameters(new Site($idSite), $periodObj, new Segment($segment['definition'], [$idSite], $periodObj->getDateStart(), $periodObj->getDateEnd()));
+            foreach ($this->segmentArchiving->getAllSegmentsToArchive($idSite) as $segmentDefinition) {
+                $params = new Parameters(new Site($idSite), $periodObj, new Segment($segmentDefinition, [$idSite], $periodObj->getDateStart(), $periodObj->getDateEnd()));
                 if ($this->isThereExistingValidPeriod($params)) {
                     $this->logger->debug('  Found usable archive for {archive}, skipping invalidation.', ['archive' => $params]);
                 } else {
-                    $this->getApiToInvalidateArchivedReport()->invalidateArchivedReports($idSite, $date, $period, $segment['definition'],
+                    $this->getApiToInvalidateArchivedReport()->invalidateArchivedReports($idSite, $date, $period, $segmentDefinition,
                         $cascadeDown = false, $_forceInvalidateNonexistant);
                 }
             }

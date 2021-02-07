@@ -162,7 +162,7 @@ class Http
             throw new Exception('Too many redirects (' . $followDepth . ')');
         }
 
-        $aUrl = trim($aUrl);
+        $aUrl = preg_replace('/[\x00-\x1F\x7F]/', '', trim($aUrl));
         $parsedUrl = @parse_url($aUrl);
 
         if (empty($parsedUrl['scheme'])) {
@@ -608,6 +608,11 @@ class Http
 
             if ($rangeBytes) {
                 curl_setopt($ch, CURLOPT_RANGE, $rangeBytes);
+            } else {
+                // see https://github.com/matomo-org/matomo/pull/17009 for more info
+                // NOTE: we only do this when CURLOPT_RANGE is not being used, because when using both the
+                // response is empty.
+                $curl_options[CURLOPT_ENCODING] = "";
             }
 
             // Case core:archive command is triggering archiving on https:// and the certificate is not valid
@@ -708,8 +713,8 @@ class Http
             @fclose($file);
 
             $fileSize = filesize($destinationPath);
-            if ((($contentLength > 0) && ($fileLength != $contentLength))
-                || ($fileSize != $fileLength)
+            if ($contentLength > 0
+                && $fileSize != $contentLength
             ) {
                 throw new Exception('File size error: ' . $destinationPath . '; expected ' . $contentLength . ' bytes; received ' . $fileLength . ' bytes; saved ' . $fileSize . ' bytes to file');
             }
